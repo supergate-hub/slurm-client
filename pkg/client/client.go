@@ -61,6 +61,7 @@ type client struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 
+	v0039Client v0039.ClientInterface
 	v0041Client v0041.ClientInterface
 	v0042Client v0042.ClientInterface
 	v0043Client v0043.ClientInterface
@@ -119,6 +120,11 @@ func (c *client) createApiClients() error {
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	c.v0039Client, err = v0039.NewSlurmClient(c.config.Server, c.config.AuthToken, c.config.HTTPClient)
+	if err != nil {
+		return fmt.Errorf("unable to create client: %w", err)
+	}
 
 	c.v0041Client, err = v0041.NewSlurmClient(c.config.Server, c.config.AuthToken, c.config.HTTPClient)
 	if err != nil {
