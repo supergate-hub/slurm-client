@@ -113,6 +113,13 @@ func (i *informerCache) runInformer(stopCh <-chan struct{}) {
 		switch i.objectType {
 		/////////////////////////////////////////////////////////////////////////////////
 
+		case types.ObjectTypeV0039JobInfo:
+			list = &types.V0039JobInfoList{}
+		case types.ObjectTypeV0039Node:
+			list = &types.V0039NodeList{}
+
+		/////////////////////////////////////////////////////////////////////////////////
+
 		case types.ObjectTypeV0041ControllerPing:
 			list = &types.V0041ControllerPingList{}
 		case types.ObjectTypeV0041JobInfo:
@@ -224,6 +231,13 @@ func (i *informerCache) runGetInformer(stopCh <-chan struct{}) {
 
 		var obj object.Object
 		switch i.objectType {
+		/////////////////////////////////////////////////////////////////////////////////
+
+		case types.ObjectTypeV0039JobInfo:
+			obj = &types.V0039JobInfo{}
+		case types.ObjectTypeV0039Node:
+			obj = &types.V0039Node{}
+
 		/////////////////////////////////////////////////////////////////////////////////
 
 		case types.ObjectTypeV0041ControllerPing:

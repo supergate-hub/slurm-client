@@ -161,6 +161,15 @@ func (c *client) Create(
 	options.ApplyOptions(opts)
 
 	switch o := obj.(type) {
+	case *types.V0039JobInfo:
+		// v0039 CreateJobInfo returns *int32
+		jobId, err := c.v0039Client.CreateJobInfo(ctx, req)
+		if err != nil {
+			return err
+		}
+		key := object.ObjectKey(fmt.Sprintf("%d", *jobId))
+		return c.Get(ctx, key, o)
+
 	/////////////////////////////////////////////////////////////////////////////////
 
 	case *types.V0041JobInfo:
@@ -246,6 +255,11 @@ func (c *client) Delete(
 	switch obj.(type) {
 	/////////////////////////////////////////////////////////////////////////////////
 
+	case *types.V0039JobInfo:
+		return c.v0039Client.DeleteJobInfo(ctx, key)
+	case *types.V0039Node:
+		return errors.New("delete not supported for V0039Node")
+
 	case *types.V0041JobInfo:
 		return c.v0041Client.DeleteJobInfo(ctx, key)
 	case *types.V0041Node:
@@ -292,6 +306,13 @@ func (c *client) Update(
 
 	key := string(obj.GetKey())
 	switch o := obj.(type) {
+	case *types.V0039JobInfo:
+		err := c.v0039Client.UpdateJobInfo(ctx, key, req)
+		if err != nil {
+			return err
+		}
+		return c.Get(ctx, obj.GetKey(), o)
+
 	/////////////////////////////////////////////////////////////////////////////////
 
 	case *types.V0041JobInfo:
@@ -380,6 +401,21 @@ func (c *client) Get(
 	}
 
 	switch o := obj.(type) {
+	/////////////////////////////////////////////////////////////////////////////////
+
+	case *types.V0039JobInfo:
+		out, err := c.v0039Client.GetJobInfo(ctx, string(key))
+		if err != nil {
+			return err
+		}
+		*o = types.V0039JobInfo{V0039JobInfo: *out}
+	case *types.V0039Node:
+		out, err := c.v0039Client.GetNode(ctx, string(key))
+		if err != nil {
+			return err
+		}
+		*o = types.V0039Node{V0039Node: *out}
+
 	/////////////////////////////////////////////////////////////////////////////////
 
 	case *types.V0041ControllerPing:
@@ -572,6 +608,29 @@ func (c *client) List(
 
 	// Determine ObjectList type
 	switch objList := list.(type) {
+	/////////////////////////////////////////////////////////////////////////////////
+
+	case *types.V0039JobInfoList:
+		out, err := c.v0039Client.ListJobInfo(ctx)
+		if err != nil {
+			return err
+		}
+		items := make([]types.V0039JobInfo, len(out))
+		for i, item := range out {
+			items[i] = types.V0039JobInfo{V0039JobInfo: item}
+		}
+		*objList = types.V0039JobInfoList{Items: items}
+	case *types.V0039NodeList:
+		out, err := c.v0039Client.ListNodes(ctx)
+		if err != nil {
+			return err
+		}
+		items := make([]types.V0039Node, len(out))
+		for i, item := range out {
+			items[i] = types.V0039Node{V0039Node: item}
+		}
+		*objList = types.V0039NodeList{Items: items}
+
 	/////////////////////////////////////////////////////////////////////////////////
 
 	case *types.V0041ControllerPingList:
