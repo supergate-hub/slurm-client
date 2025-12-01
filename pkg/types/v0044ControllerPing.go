@@ -6,9 +6,9 @@ package types
 import (
 	"k8s.io/utils/ptr"
 
-	api "github.com/SlinkyProject/slurm-client/api/v0044"
-	"github.com/SlinkyProject/slurm-client/pkg/object"
-	"github.com/SlinkyProject/slurm-client/pkg/utils"
+	api "github.com/supergate-hub/slurm-client/api/v0044"
+	"github.com/supergate-hub/slurm-client/pkg/object"
+	"github.com/supergate-hub/slurm-client/pkg/utils"
 )
 
 const (

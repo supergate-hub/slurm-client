@@ -9,8 +9,8 @@ import (
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/utils/ptr"
 
-	api "github.com/SlinkyProject/slurm-client/api/v0043"
-	"github.com/SlinkyProject/slurm-client/pkg/object"
+	api "github.com/supergate-hub/slurm-client/api/v0043"
+	"github.com/supergate-hub/slurm-client/pkg/object"
 )
 
 func TestV0043ControllerPing_GetKey(t *testing.T) {

@@ -10,7 +10,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	api "github.com/SlinkyProject/slurm-client/api/v0043"
+	api "github.com/supergate-hub/slurm-client/api/v0043"
 )
 
 var _ = Describe("NewClient", func() {

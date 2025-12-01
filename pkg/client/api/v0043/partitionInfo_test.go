@@ -12,10 +12,10 @@ import (
 
 	"k8s.io/utils/ptr"
 
-	api "github.com/SlinkyProject/slurm-client/api/v0043"
-	"github.com/SlinkyProject/slurm-client/pkg/client/api/v0043/fake"
-	"github.com/SlinkyProject/slurm-client/pkg/client/api/v0043/interceptor"
-	"github.com/SlinkyProject/slurm-client/pkg/types"
+	api "github.com/supergate-hub/slurm-client/api/v0043"
+	"github.com/supergate-hub/slurm-client/pkg/client/api/v0043/fake"
+	"github.com/supergate-hub/slurm-client/pkg/client/api/v0043/interceptor"
+	"github.com/supergate-hub/slurm-client/pkg/types"
 )
 
 func TestSlurmClient_GetPartitionInfo(t *testing.T) {

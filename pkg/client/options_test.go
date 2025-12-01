@@ -9,8 +9,8 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/equality"
 
-	"github.com/SlinkyProject/slurm-client/pkg/object"
-	"github.com/SlinkyProject/slurm-client/pkg/types"
+	"github.com/supergate-hub/slurm-client/pkg/object"
+	"github.com/supergate-hub/slurm-client/pkg/types"
 )
 
 func TestClientOptions_ApplyOptions(t *testing.T) {

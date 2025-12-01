@@ -15,13 +15,14 @@ import (
 	"k8s.io/utils/ptr"
 	"k8s.io/utils/set"
 
-	v0041 "github.com/SlinkyProject/slurm-client/pkg/client/api/v0041"
-	v0042 "github.com/SlinkyProject/slurm-client/pkg/client/api/v0042"
-	v0043 "github.com/SlinkyProject/slurm-client/pkg/client/api/v0043"
-	v0044 "github.com/SlinkyProject/slurm-client/pkg/client/api/v0044"
-	"github.com/SlinkyProject/slurm-client/pkg/event"
-	"github.com/SlinkyProject/slurm-client/pkg/object"
-	"github.com/SlinkyProject/slurm-client/pkg/types"
+	v0039 "github.com/supergate-hub/slurm-client/pkg/client/api/v0039"
+	v0041 "github.com/supergate-hub/slurm-client/pkg/client/api/v0041"
+	v0042 "github.com/supergate-hub/slurm-client/pkg/client/api/v0042"
+	v0043 "github.com/supergate-hub/slurm-client/pkg/client/api/v0043"
+	v0044 "github.com/supergate-hub/slurm-client/pkg/client/api/v0044"
+	"github.com/supergate-hub/slurm-client/pkg/event"
+	"github.com/supergate-hub/slurm-client/pkg/object"
+	"github.com/supergate-hub/slurm-client/pkg/types"
 )
 
 // Config holds the common attributes that can be passed to a Slurm client on

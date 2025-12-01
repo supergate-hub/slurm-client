@@ -10,8 +10,8 @@ import (
 
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 
-	"github.com/SlinkyProject/slurm-client/pkg/types"
-	"github.com/SlinkyProject/slurm-client/pkg/utils"
+	"github.com/supergate-hub/slurm-client/pkg/types"
+	"github.com/supergate-hub/slurm-client/pkg/utils"
 )
 
 type StatsInterface interface {

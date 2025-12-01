@@ -8,8 +8,8 @@ import (
 	"io"
 	"net/http"
 
-	api "github.com/SlinkyProject/slurm-client/api/v0041"
-	"github.com/SlinkyProject/slurm-client/pkg/client/api/v0041/interceptor"
+	api "github.com/supergate-hub/slurm-client/api/v0041"
+	"github.com/supergate-hub/slurm-client/pkg/client/api/v0041/interceptor"
 )
 
 var (

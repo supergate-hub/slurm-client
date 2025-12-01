@@ -7,7 +7,7 @@ import (
 	"context"
 	"io"
 
-	api "github.com/SlinkyProject/slurm-client/api/v0044"
+	api "github.com/supergate-hub/slurm-client/api/v0044"
 )
 
 type Funcs struct {

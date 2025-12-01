@@ -15,9 +15,9 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/utils/set"
 
-	"github.com/SlinkyProject/slurm-client/pkg/event"
-	"github.com/SlinkyProject/slurm-client/pkg/object"
-	"github.com/SlinkyProject/slurm-client/pkg/types"
+	"github.com/supergate-hub/slurm-client/pkg/event"
+	"github.com/supergate-hub/slurm-client/pkg/object"
+	"github.com/supergate-hub/slurm-client/pkg/types"
 )
 
 const (

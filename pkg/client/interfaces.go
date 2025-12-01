@@ -10,7 +10,7 @@ import (
 
 	"k8s.io/client-go/tools/cache"
 
-	"github.com/SlinkyProject/slurm-client/pkg/object"
+	"github.com/supergate-hub/slurm-client/pkg/object"
 )
 
 // ObjectKey identifies a Slurm Object.

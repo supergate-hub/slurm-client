@@ -11,8 +11,8 @@ import (
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/utils/ptr"
 
-	"github.com/SlinkyProject/slurm-client/pkg/types"
-	"github.com/SlinkyProject/slurm-client/pkg/utils"
+	"github.com/supergate-hub/slurm-client/pkg/types"
+	"github.com/supergate-hub/slurm-client/pkg/utils"
 )
 
 type ControllerPingInfoInterface interface {

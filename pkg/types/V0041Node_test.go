@@ -10,8 +10,8 @@ import (
 	"k8s.io/utils/ptr"
 	"k8s.io/utils/set"
 
-	api "github.com/SlinkyProject/slurm-client/api/v0041"
-	"github.com/SlinkyProject/slurm-client/pkg/object"
+	api "github.com/supergate-hub/slurm-client/api/v0041"
+	"github.com/supergate-hub/slurm-client/pkg/object"
 )
 
 func TestV0041Node_GetKey(t *testing.T) {

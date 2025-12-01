@@ -12,9 +12,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/utils/ptr"
 
-	api "github.com/SlinkyProject/slurm-client/api/v0044"
-	"github.com/SlinkyProject/slurm-client/pkg/object"
-	"github.com/SlinkyProject/slurm-client/pkg/types"
+	api "github.com/supergate-hub/slurm-client/api/v0044"
+	"github.com/supergate-hub/slurm-client/pkg/object"
+	"github.com/supergate-hub/slurm-client/pkg/types"
 )
 
 var _ = Describe("Client v0044", func() {

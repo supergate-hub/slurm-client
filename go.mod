@@ -1,4 +1,4 @@
-module github.com/SlinkyProject/slurm-client
+module github.com/supergate-hub/slurm-client
 
 go 1.25.0
 
@@ -11,6 +11,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.37.0
 	github.com/testcontainers/testcontainers-go/modules/compose v0.37.0
+	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/apimachinery v0.34.1
 	k8s.io/client-go v0.34.1
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4

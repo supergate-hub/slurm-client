@@ -10,7 +10,7 @@ import (
 
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 
-	"github.com/SlinkyProject/slurm-client/pkg/types"
+	"github.com/supergate-hub/slurm-client/pkg/types"
 )
 
 type ReconfigureInterface interface {

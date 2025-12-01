@@ -11,7 +11,7 @@ import (
 
 	"k8s.io/utils/ptr"
 
-	api "github.com/SlinkyProject/slurm-client/api/v0044"
+	api "github.com/supergate-hub/slurm-client/api/v0044"
 )
 
 const (

@@ -6,8 +6,8 @@ package interceptor
 import (
 	"context"
 
-	"github.com/SlinkyProject/slurm-client/pkg/client"
-	"github.com/SlinkyProject/slurm-client/pkg/object"
+	"github.com/supergate-hub/slurm-client/pkg/client"
+	"github.com/supergate-hub/slurm-client/pkg/object"
 )
 
 // Funcs contains functions that are called instead of the underlying client's methods.

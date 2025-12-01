@@ -8,10 +8,10 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/SlinkyProject/slurm-client/pkg/client"
-	"github.com/SlinkyProject/slurm-client/pkg/client/interceptor"
-	"github.com/SlinkyProject/slurm-client/pkg/object"
-	"github.com/SlinkyProject/slurm-client/pkg/types"
+	"github.com/supergate-hub/slurm-client/pkg/client"
+	"github.com/supergate-hub/slurm-client/pkg/client/interceptor"
+	"github.com/supergate-hub/slurm-client/pkg/object"
+	"github.com/supergate-hub/slurm-client/pkg/types"
 )
 
 type fakeClient struct {

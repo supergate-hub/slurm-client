@@ -8,8 +8,8 @@ import (
 
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 
-	api "github.com/SlinkyProject/slurm-client/api/v0042"
-	"github.com/SlinkyProject/slurm-client/pkg/object"
+	api "github.com/supergate-hub/slurm-client/api/v0042"
+	"github.com/supergate-hub/slurm-client/pkg/object"
 )
 
 func TestV0042Stats_GetKey(t *testing.T) {

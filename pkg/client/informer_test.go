@@ -12,10 +12,10 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/utils/ptr"
 
-	v0041 "github.com/SlinkyProject/slurm-client/api/v0041"
-	"github.com/SlinkyProject/slurm-client/pkg/event"
-	"github.com/SlinkyProject/slurm-client/pkg/object"
-	"github.com/SlinkyProject/slurm-client/pkg/types"
+	v0041 "github.com/supergate-hub/slurm-client/api/v0041"
+	"github.com/supergate-hub/slurm-client/pkg/event"
+	"github.com/supergate-hub/slurm-client/pkg/object"
+	"github.com/supergate-hub/slurm-client/pkg/types"
 )
 
 func Test_informerCache_processObjects(t *testing.T) {

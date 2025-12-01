@@ -8,10 +8,10 @@ import (
 	"reflect"
 	"testing"
 
-	api "github.com/SlinkyProject/slurm-client/api/v0044"
-	"github.com/SlinkyProject/slurm-client/pkg/client/api/v0044/fake"
-	"github.com/SlinkyProject/slurm-client/pkg/client/api/v0044/interceptor"
-	"github.com/SlinkyProject/slurm-client/pkg/types"
+	api "github.com/supergate-hub/slurm-client/api/v0044"
+	"github.com/supergate-hub/slurm-client/pkg/client/api/v0044/fake"
+	"github.com/supergate-hub/slurm-client/pkg/client/api/v0044/interceptor"
+	"github.com/supergate-hub/slurm-client/pkg/types"
 )
 
 func TestSlurmClient_GetNodeResourceLayout(t *testing.T) {

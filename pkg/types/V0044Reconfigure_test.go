@@ -8,7 +8,7 @@ import (
 
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 
-	"github.com/SlinkyProject/slurm-client/pkg/object"
+	"github.com/supergate-hub/slurm-client/pkg/object"
 )
 
 func TestV0044Reconfigure_GetKey(t *testing.T) {

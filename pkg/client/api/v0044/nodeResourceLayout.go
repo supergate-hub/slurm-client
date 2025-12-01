@@ -10,9 +10,9 @@ import (
 
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 
-	api "github.com/SlinkyProject/slurm-client/api/v0044"
-	"github.com/SlinkyProject/slurm-client/pkg/types"
-	"github.com/SlinkyProject/slurm-client/pkg/utils"
+	api "github.com/supergate-hub/slurm-client/api/v0044"
+	"github.com/supergate-hub/slurm-client/pkg/types"
+	"github.com/supergate-hub/slurm-client/pkg/utils"
 )
 
 type NodeResourceLayoutInterface interface {
