@@ -75,6 +75,7 @@ type GenericJobService interface {
 	List(ctx context.Context, opts interface{}) (interface{}, error)
 	Get(ctx context.Context, id string) (interface{}, error)
 	Delete(ctx context.Context, id string) error
+	Submit(ctx context.Context, opts interface{}) (interface{}, error)
 }
 
 // GenericNodeService defines common node operations.
@@ -88,4 +89,3 @@ type GenericAccountService interface {
 	List(ctx context.Context, opts interface{}) (interface{}, error)
 	Get(ctx context.Context, name string) (interface{}, error)
 }
-

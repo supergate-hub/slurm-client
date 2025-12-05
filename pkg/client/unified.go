@@ -129,6 +129,25 @@ func (w *slurmv0040JobsWrapper) Delete(ctx context.Context, id string) error {
 	return w.service.Delete(ctx, id)
 }
 
+func (w *slurmv0040JobsWrapper) Submit(ctx context.Context, opts interface{}) (interface{}, error) {
+	var submitOpts slurmv0040jobs.SubmitOpts
+	if opts != nil {
+		var ok bool
+		submitOpts, ok = opts.(slurmv0040jobs.SubmitOpts)
+		if !ok {
+			// Try pointer if passed as pointer
+			if ptrOpts, ok := opts.(*slurmv0040jobs.SubmitOpts); ok {
+				if ptrOpts != nil {
+					submitOpts = *ptrOpts
+				}
+			} else {
+				return nil, fmt.Errorf("invalid submit options type for v0040: expected %T, got %T", submitOpts, opts)
+			}
+		}
+	}
+	return w.service.Submit(ctx, submitOpts)
+}
+
 // Nodes Wrapper
 type slurmv0040NodesWrapper struct {
 	service slurmv0040.NodesInterface
