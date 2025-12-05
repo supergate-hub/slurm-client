@@ -36,6 +36,10 @@ type Config struct {
 	// +required
 	AuthToken string
 
+	// Version specifies the Slurm API version to use (e.g. "v0.0.40").
+	// +optional
+	Version string
+
 	// HTTPClient is the HTTP client to use for requests.
 	HTTPClient *http.Client
 }

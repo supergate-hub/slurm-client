@@ -6,7 +6,7 @@
 // Usage:
 //
 //	cfg := slurmclient.Config{
-//	    Endpoint:  "http://slurmrestd:6820",
+//	    Endpoint:  "http://slurmctld:6820",
 //	    AuthToken: "<jwt token>",
 //	}
 //
@@ -18,7 +18,6 @@
 //	// Use domain-specific interfaces
 //	jobs, _ := cli.Jobs.List(ctx, jobs.ListOpts{})
 //	nodes, _ := cli.Nodes.List(ctx, nodes.ListOpts{})
-//	pings, _ := cli.Ping.Ping(ctx)
 package v0040
 
 import (
@@ -46,7 +45,7 @@ type Client struct {
 	// Licenses provides access to license operations.
 	Licenses LicensesInterface
 
-	// Shares provides access to fair share operations.
+	// Shares provides access to fair share information.
 	Shares SharesInterface
 
 	// Diag provides access to diagnostic operations.
@@ -55,7 +54,7 @@ type Client struct {
 	// Ping provides access to controller ping operations.
 	Ping PingInterface
 
-	// Reconfigure provides access to reconfigure operations.
+	// Reconfigure provides access to reconfiguration operations.
 	Reconfigure ReconfigureInterface
 }
 
@@ -86,5 +85,4 @@ func NewClient(cfg slurmclient.Config) (*Client, error) {
 func (c *Client) ServiceClient() *slurmclient.ServiceClient {
 	return c.serviceClient
 }
-
 
