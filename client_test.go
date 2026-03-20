@@ -3,6 +3,8 @@ package slurmclient
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -415,5 +417,163 @@ func TestNewClient_VersionDiscovery(t *testing.T) {
 	}
 	if c.Version() != V0040 {
 		t.Errorf("auto-detected version = %q, want %q", c.Version(), V0040)
+	}
+}
+
+// --- Multi-version URL tests ---
+
+func TestMultiVersion_URLPrefix(t *testing.T) {
+	versions := []Version{V0039, V0040, V0041, V0042, V0043, V0044}
+
+	for _, v := range versions {
+		t.Run(string(v), func(t *testing.T) {
+			var gotPath string
+			srv := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+				gotPath = r.URL.Path
+				json.NewEncoder(w).Encode(map[string]any{"jobs": []any{}})
+			})
+			defer srv.Close()
+
+			c, err := NewClient(context.Background(), AuthOpts{
+				Endpoint:  srv.URL,
+				AuthToken: "token",
+				Version:   v,
+			})
+			if err != nil {
+				t.Fatalf("NewClient(%s): %v", v, err)
+			}
+
+			_, _ = c.Slurm.Jobs().List(context.Background())
+
+			wantPrefix := "/slurm/" + string(v) + "/jobs"
+			if gotPath != wantPrefix {
+				t.Errorf("path = %q, want %q", gotPath, wantPrefix)
+			}
+		})
+	}
+}
+
+func TestMultiVersion_SlurmdbURLPrefix(t *testing.T) {
+	var gotPath string
+	srv := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		json.NewEncoder(w).Encode(map[string]any{"accounts": []any{}})
+	})
+	defer srv.Close()
+
+	c, err := NewClient(context.Background(), AuthOpts{
+		Endpoint:  srv.URL,
+		AuthToken: "token",
+		Version:   V0041,
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	_, _ = c.Slurmdb.Accounts().List(context.Background())
+
+	want := "/slurmdb/v0.0.41/accounts"
+	if gotPath != want {
+		t.Errorf("path = %q, want %q", gotPath, want)
+	}
+}
+
+// --- Retry test ---
+
+func TestTransport_Retry(t *testing.T) {
+	attempts := 0
+	srv := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts < 3 {
+			w.WriteHeader(503)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"pings": []any{}})
+	})
+	defer srv.Close()
+
+	c, err := NewClient(context.Background(), AuthOpts{
+		Endpoint:  srv.URL,
+		AuthToken: "token",
+		Version:   V0040,
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	_, err = c.Slurm.Ping().Get(context.Background())
+	if err != nil {
+		t.Fatalf("expected success after retries, got: %v", err)
+	}
+	if attempts != 3 {
+		t.Errorf("attempts = %d, want 3", attempts)
+	}
+}
+
+func TestTransport_RetryExhausted(t *testing.T) {
+	srv := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(503)
+	})
+	defer srv.Close()
+
+	c, err := NewClient(context.Background(), AuthOpts{
+		Endpoint:       srv.URL,
+		AuthToken:      "token",
+		Version:        V0040,
+		MaxRetries:     2,
+		RetryBaseDelay: 1, // 1ns for fast test
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	_, err = c.Slurm.Ping().Get(context.Background())
+	if err == nil {
+		t.Fatal("expected RetryExhaustedError")
+	}
+	var re *RetryExhaustedError
+	if !errors.As(err, &re) {
+		t.Fatalf("err type = %T, want *RetryExhaustedError", err)
+	}
+}
+
+// --- Unix socket test (config only) ---
+
+func TestNewClient_UnixSocket(t *testing.T) {
+	// Can't test actual unix socket without a real socket file,
+	// but verify that the client creates successfully with the option.
+	_, err := NewClient(context.Background(), AuthOpts{
+		UnixSocket: "/tmp/nonexistent.sock",
+		AuthToken:  "token",
+		Version:    V0040,
+	})
+	if err != nil {
+		t.Fatalf("NewClient with UnixSocket: %v", err)
+	}
+}
+
+// --- Logging test ---
+
+func TestTransport_LoggingDoesNotPanic(t *testing.T) {
+	srv := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"pings": []any{}})
+	})
+	defer srv.Close()
+
+	logger := slog.Default()
+	c, err := NewClient(context.Background(), AuthOpts{
+		Endpoint:  srv.URL,
+		AuthToken: "secret-token",
+		Version:   V0040,
+		Logger:    logger,
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	// Should not panic with logger enabled
+	_, err = c.Slurm.Ping().Get(context.Background())
+	if err != nil {
+		t.Fatalf("Ping: %v", err)
 	}
 }
