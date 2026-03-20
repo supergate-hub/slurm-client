@@ -1,70 +1,81 @@
 # Slurm Client
 
-<!-- mdformat-toc start --slug=github --no-anchors --maxlevel=6 --minlevel=1 -->
-
-- [Slurm Client](#slurm-client)
-  - [Overview](#overview)
-  - [Design](#design)
-    - [Sequence Diagram](#sequence-diagram)
-
-<!-- mdformat-toc end -->
-
 ## Overview
 
-This Go library is responsible for enabling communication with [Slurm]. It
-relies on communication with [slurmrestd] and `auth/jwt` based authentication
-via the [rest-api].
+This Go SDK provides a proxy-style client for the [Slurm REST API][rest-api],
+inspired by [openstacksdk]. It communicates with [slurmrestd] using JWT-based
+authentication.
 
-## Design
+## Architecture
 
-The Slurm client abstracts the Slurm OpenAPI Spec endpoints and objects for easy
-use. It supports a number of Slurm versions.
+The SDK is organized in three layers:
 
-### Sequence Diagram
-
-```mermaid
-sequenceDiagram
-    autonumber
-
-    actor User as User
-    participant SC as Slurm Client
-    box Slurm Client Internals
-        participant IC as Informer Cache
-        participant OI as Object Informer
-        participant OEC as Object Event Channel
-        participant OH as Object Handler
-    end %% Slurm Client Internals
-    participant SAPI as Slurm REST API
-
-    User->>+SC: Get Slurm Object (e.g. Node, Job)
-    IC-->>SC: Lookup Object Informer
-    alt Informer Started
-    SC->>+IC: Get Slurm Object
-        loop Object Informer Poll
-            note over OI: async go routine
-            OI->>IC: HasSynced=false
-            OI->>+SAPI: Get Slurm Object
-            SAPI-->>-OI: Return Slurm Object
-            OI->>IC: Update Object Cache
-            OI->>OEC: Emit Cache Event
-            OI->>IC: HasSynced=true
-        end %% loop Informer Poll
-        loop Cache Event Handler
-            note over OH: async go routine
-            OEC-->>OH: Watch Cache Event
-            OH->>OH: Run Handler for Object
-        end %% loop Event Handle
-        IC->>IC: Wait for HasSynced
-        IC-->>-SC: Return Slurm Object
-    else Informer Not Started
-        SC->>+SAPI: Get Slurm Object
-        SAPI-->>-SC: Return Slurm Object
-    end %% alt Informer Started
-    SC-->>-User: Return Slurm Object
 ```
+┌─────────────────────────────────────────────────┐
+│  Client                                          │
+│  ├── Slurm   (SlurmProxy)                        │
+│  │   ├── Jobs()       → JobsService              │
+│  │   ├── Nodes()      → NodesService             │
+│  │   ├── Partitions() → PartitionsService         │
+│  │   └── ... (9 resources)                        │
+│  └── Slurmdb (SlurmdbProxy)                       │
+│      ├── Accounts()   → AccountsService           │
+│      ├── Users()      → UsersService              │
+│      └── ... (11 resources)                       │
+├─────────────────────────────────────────────────┤
+│  Transport                                        │
+│  ├── HTTP request/response                        │
+│  ├── Bearer token auth (masked in logs)           │
+│  ├── Retry with exponential backoff               │
+│  ├── Structured logging (slog)                    │
+│  ├── URL construction: base/domain/version/path   │
+│  └── Unix socket support                          │
+├─────────────────────────────────────────────────┤
+│  api/v0040 (OpenAPI generated types)              │
+│  └── V0040JobInfo, V0040Node, V0040Account, ...   │
+└─────────────────────────────────────────────────┘
+```
+
+### Request Flow
+
+```
+User code
+  │
+  ▼
+client.Slurm.Jobs().List(ctx)
+  │
+  ▼
+JobsService.List()
+  │  builds resource path: "/jobs"
+  ▼
+Transport.Get(ctx, "/jobs", &resp)
+  │  constructs URL: baseURL + "/slurm/v0.0.40" + "/jobs"
+  │  injects: Authorization: Bearer <token>
+  │  retry on: 503, 429, connection reset
+  ▼
+slurmrestd HTTP API
+  │
+  ▼
+JSON response → unmarshal into v0040.V0040OpenapiJobInfoResp
+  │
+  ▼
+return []v0040.V0040JobInfo
+```
+
+### Version Compatibility
+
+Response parsing uses v0.0.40 type definitions. All supported versions
+(v0.0.39 through v0.0.44) share the same JSON field names, so v0.0.40
+types can safely unmarshal responses from any version. The Transport
+layer handles the version-specific URL prefix.
+
+### Testing
+
+The `slurmtest` package provides an in-memory mock slurmrestd server
+for unit testing without a real Slurm cluster.
 
 <!-- Links -->
 
 [rest-api]: https://slurm.schedmd.com/rest_api.html
-[slurm]: https://www.schedmd.com/slurm
+[openstacksdk]: https://docs.openstack.org/openstacksdk/latest/
 [slurmrestd]: https://slurm.schedmd.com/slurmrestd.html
