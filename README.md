@@ -8,9 +8,167 @@
 
 </div>
 
-[OpenAPI] Golang client library for [Slurm REST API][rest-api]. This project is a fork of [SlinkyProject/slurm-client] with extended support for older Slurm versions.
+Go SDK for the [Slurm REST API][rest-api], inspired by [openstacksdk]. Provides a proxy-style client with IDE-friendly auto-completion chains.
 
-[OpenAPI]: https://www.openapis.org
 [rest-api]: https://slurm.schedmd.com/rest_api.html
-[Slinky]: https://github.com/SlinkyProject
-[SlinkyProject/slurm-client]: https://github.com/SlinkyProject/slurm-client
+[openstacksdk]: https://docs.openstack.org/openstacksdk/latest/
+
+## Install
+
+```bash
+go get github.com/supergate-hub/slurm-client
+```
+
+## Quick Start
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+
+    slurm "github.com/supergate-hub/slurm-client"
+)
+
+func main() {
+    ctx := context.Background()
+
+    client, err := slurm.NewClient(ctx, slurm.AuthOpts{
+        Endpoint:  "http://slurmctld:6820",
+        AuthToken: "your-jwt-token",
+        Version:   slurm.V0040, // or omit for auto-detection
+    })
+    if err != nil {
+        panic(err)
+    }
+
+    // List jobs
+    jobs, _ := client.Slurm.Jobs().List(ctx)
+    for _, j := range jobs {
+        fmt.Printf("Job %d: %s\n", *j.JobId, *j.Name)
+    }
+
+    // Get a specific node
+    node, _ := client.Slurm.Nodes().Get(ctx, "node01")
+    fmt.Printf("Node: %s\n", *node.Name)
+
+    // Submit a job
+    result, _ := client.Slurm.Jobs().Submit(ctx, slurm.JobSubmitOpts{
+        Script: "#!/bin/bash\nsrun hostname",
+    })
+    fmt.Printf("Submitted job: %d\n", result.JobID)
+
+    // SlurmDB accounts
+    accounts, _ := client.Slurmdb.Accounts().List(ctx)
+    for _, a := range accounts {
+        fmt.Printf("Account: %s\n", a.Name)
+    }
+}
+```
+
+## Features
+
+- **Proxy pattern**: `client.Slurm.Jobs().List(ctx)` — IDE auto-completion at every level
+- **Version auto-detection**: omit `Version` and the SDK queries slurmrestd's `/openapi` endpoint
+- **Retry with backoff**: automatic retry on 503, 429, and connection errors
+- **Structured logging**: pass `*slog.Logger` via `AuthOpts.Logger` (tokens always masked)
+- **Unix socket support**: set `AuthOpts.UnixSocket` for local slurmrestd connections
+- **Full v0.0.40 coverage**: 9 Slurm resources + 11 SlurmDB resources
+- **Mock server**: `slurmtest` package for unit testing
+
+## Supported Resources
+
+### Slurm API
+
+| Resource | Operations |
+|----------|-----------|
+| Jobs | List, Get, Submit, Update, Delete |
+| Nodes | List, Get, Delete |
+| Partitions | List, Get |
+| Reservations | List, Get |
+| Licenses | List |
+| Shares | Get |
+| Diag | Get |
+| Ping | Get |
+| Reconfigure | Reconfigure |
+
+### SlurmDB API
+
+| Resource | Operations |
+|----------|-----------|
+| Accounts | List, Get |
+| Users | List, Get |
+| Associations | List |
+| Clusters | List, Get |
+| QOS | List, Get |
+| Jobs | List, Get |
+| WCKeys | List |
+| TRES | List |
+| Instances | List |
+| Config | Get |
+| Diag | Get |
+
+## Testing with Mock Server
+
+```go
+import (
+    slurm "github.com/supergate-hub/slurm-client"
+    "github.com/supergate-hub/slurm-client/slurmtest"
+)
+
+func TestMyCode(t *testing.T) {
+    mock := slurmtest.NewServer()
+    defer mock.Close()
+
+    mock.AddJob(slurmtest.MockJob{ID: 123, Name: "test-job"})
+    mock.AddNode(slurmtest.MockNode{Name: "node01"})
+
+    client, _ := slurm.NewClient(ctx, slurm.AuthOpts{
+        Endpoint:  mock.URL(),
+        AuthToken: "test",
+        Version:   slurm.V0040,
+    })
+
+    jobs, _ := client.Slurm.Jobs().List(ctx)
+    // assert len(jobs) == 1
+}
+```
+
+## Configuration
+
+| Option | Description | Default |
+|--------|------------|---------|
+| `Endpoint` | slurmrestd HTTP URL | required |
+| `AuthToken` | JWT token | required |
+| `Version` | API version (e.g., `V0040`) | auto-detect |
+| `UnixSocket` | Unix socket path | — |
+| `HTTPClient` | Custom `*http.Client` | 30s timeout |
+| `Logger` | `*slog.Logger` for structured logging | disabled |
+| `MaxRetries` | Max retry attempts | 3 |
+| `RetryBaseDelay` | Base delay for exponential backoff | 500ms |
+
+## Supported Versions
+
+| Constant | Slurm API Version |
+|----------|-------------------|
+| `V0039` | v0.0.39 |
+| `V0040` | v0.0.40 |
+| `V0041` | v0.0.41 |
+| `V0042` | v0.0.42 |
+| `V0043` | v0.0.43 |
+| `V0044` | v0.0.44 |
+
+## Adding New Versions
+
+```bash
+# Generate OpenAPI client for a new version
+./hack/generate-version.sh v0.0.45 path/to/openapi-spec.json
+
+# Check compatibility with new spec
+./hack/check-compat.sh path/to/new-spec.json
+```
+
+## License
+
+[Apache 2.0](./LICENSES/Apache-2.0.txt)
