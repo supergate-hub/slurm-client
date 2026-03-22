@@ -159,6 +159,82 @@ func TestMyCode(t *testing.T) {
 | `V0043` | v0.0.43 |
 | `V0044` | v0.0.44 |
 
+## MCP Server
+
+The project includes an MCP (Model Context Protocol) server that enables AI agents
+like Claude to manage Slurm clusters directly.
+
+### Build
+
+```bash
+go build -o slurm-mcp ./cmd/slurm-mcp/
+```
+
+### Run
+
+```bash
+SLURM_ENDPOINT=http://slurmctld:6820 SLURM_TOKEN=<jwt> ./slurm-mcp
+```
+
+### Claude Desktop
+
+Add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "slurm": {
+      "command": "/path/to/slurm-mcp",
+      "env": {
+        "SLURM_ENDPOINT": "http://slurmctld:6820",
+        "SLURM_TOKEN": "your-jwt-token"
+      }
+    }
+  }
+}
+```
+
+### Claude Code
+
+Add to `.claude/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "slurm": {
+      "command": "/path/to/slurm-mcp",
+      "env": {
+        "SLURM_ENDPOINT": "http://slurmctld:6820",
+        "SLURM_TOKEN": "your-jwt-token"
+      }
+    }
+  }
+}
+```
+
+### Available Tools (24)
+
+**Slurm API:**
+`slurm_ping`, `slurm_list_jobs`, `slurm_get_job`, `slurm_submit_job`,
+`slurm_cancel_job`, `slurm_list_nodes`, `slurm_get_node`,
+`slurm_list_partitions`, `slurm_get_partition`, `slurm_list_reservations`,
+`slurm_list_licenses`, `slurm_diag`
+
+**SlurmDB API:**
+`slurmdb_list_accounts`, `slurmdb_get_account`, `slurmdb_list_users`,
+`slurmdb_get_user`, `slurmdb_list_jobs`, `slurmdb_get_job`,
+`slurmdb_list_clusters`, `slurmdb_list_qos`, `slurmdb_list_associations`,
+`slurmdb_list_tres`, `slurmdb_list_wckeys`, `slurmdb_diag`
+
+### Environment Variables
+
+| Variable | Description | Required |
+|----------|------------|----------|
+| `SLURM_ENDPOINT` | slurmrestd URL | Yes (or `SLURM_UNIX_SOCKET`) |
+| `SLURM_TOKEN` | JWT token | Yes |
+| `SLURM_VERSION` | API version (e.g., `v0.0.40`) | No (auto-detect) |
+| `SLURM_UNIX_SOCKET` | Unix socket path | No |
+
 ## Adding New Versions
 
 ```bash
