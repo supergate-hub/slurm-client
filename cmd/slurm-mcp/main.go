@@ -123,9 +123,32 @@ func main() {
 	registerSlurmdbTools(s, &resolver)
 	registerResources(s, &resolver, mgr)
 	registerPrompts(s, &resolver, mgr)
+	registerAnalysisTools(s, &resolver, mgr)
 
 	if resolver.isMultiCluster() {
 		registerMultiClusterTools(s, mgr)
+	}
+
+	// RBAC: parse from clusters.yaml if present, or use default (admin)
+	var rbacCfg RBACConfig
+	if *configPath != "" {
+		if cfg := ParseRBACFromClustersConfig(*configPath); cfg != nil {
+			rbacCfg = *cfg
+		}
+	}
+	if accessLevel := os.Getenv("MCP_ACCESS_LEVEL"); accessLevel != "" {
+		rbacCfg.DefaultAccess = AccessLevel(accessLevel)
+	}
+	if auditLog := os.Getenv("MCP_AUDIT_LOG"); auditLog != "" {
+		rbacCfg.AuditLog = auditLog
+	}
+	rbac, err := NewRBAC(rbacCfg)
+	if err != nil {
+		log.Fatalf("Failed to initialize RBAC: %v", err)
+	}
+	defer rbac.Close()
+	if rbac.NeedsEnforcement() || rbacCfg.AuditLog != "" {
+		rbac.LogStartup()
 	}
 
 	switch *transport {

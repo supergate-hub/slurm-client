@@ -238,3 +238,6 @@ func jsonResult(v any) (*mcp.CallToolResult, error) {
 	}
 	return mcp.NewToolResultText(string(data)), nil
 }
+
+func jsonMarshal(v any) ([]byte, error)    { return json.Marshal(v) }
+func jsonUnmarshal(data []byte, v any) error { return json.Unmarshal(data, v) }
