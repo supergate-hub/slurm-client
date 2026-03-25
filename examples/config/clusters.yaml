@@ -1,0 +1,27 @@
+# Example multi-cluster configuration for slurm-mcp and the Go SDK.
+#
+# Environment variables in ${VAR} format are expanded at load time.
+# Token values should always use env var references — never hardcode secrets.
+#
+# SDK usage:
+#   opts, _ := slurmclient.ParseConfig("clusters.yaml")
+#   mgr, _ := slurmclient.NewManager(ctx, *opts)
+#
+# MCP usage:
+#   slurm-mcp --config clusters.yaml
+#   slurm-mcp --config clusters.yaml --transport=sse --port=8080 --bearer-token=secret
+
+clusters:
+  gpu:
+    endpoint: http://gpu-cluster:6820
+    token: ${GPU_SLURM_TOKEN}
+    # version: v0.0.40  # optional, auto-detected if omitted
+
+  cpu:
+    endpoint: http://cpu-cluster:6820
+    token: ${CPU_SLURM_TOKEN}
+
+  # Unix socket example:
+  # local:
+  #   unix_socket: /var/run/slurmrestd.sock
+  #   token: ${LOCAL_SLURM_TOKEN}
