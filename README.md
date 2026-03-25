@@ -248,7 +248,7 @@ docker run -p 8080:8080 \
 }
 ```
 
-### Available Tools (29)
+### Available Tools (31)
 
 **Slurm API (all tools accept optional `cluster` parameter):**
 `slurm_ping`, `slurm_list_jobs`, `slurm_get_job`, `slurm_submit_job`,
@@ -266,6 +266,9 @@ docker run -p 8080:8080 \
 `slurm_list_clusters`, `slurm_cluster_status`, `slurm_cross_cluster_jobs`,
 `slurm_node_health_summary`, `slurm_resource_availability`
 
+**Analysis Tools:**
+`slurm_gpu_allocation`, `slurm_queue_depth`
+
 ### MCP Resources
 
 Read-only data automatically available as context to AI agents:
@@ -276,6 +279,29 @@ Read-only data automatically available as context to AI agents:
 Pre-built prompt templates for common scenarios:
 `cluster-status-summary`, `job-queue-analysis`, `node-troubleshooting`
 
+### RBAC & Audit Logging
+
+Control which operations AI agents can perform:
+
+```yaml
+# In clusters.yaml
+rbac:
+  default_access: operator  # read-only | operator | admin
+  audit_log: /var/log/slurm-mcp-audit.jsonl
+```
+
+Or via environment variables:
+
+```bash
+MCP_ACCESS_LEVEL=read-only MCP_AUDIT_LOG=/tmp/audit.log ./slurm-mcp
+```
+
+| Access Level | Allowed Operations |
+|-------------|-------------------|
+| `read-only` | List, Get, Ping, Diag (all read operations) |
+| `operator` | Read + Submit job, Cancel job |
+| `admin` | All operations (default) |
+
 ### Environment Variables
 
 | Variable | Description | Required |
@@ -285,6 +311,8 @@ Pre-built prompt templates for common scenarios:
 | `SLURM_VERSION` | API version (e.g., `v0.0.40`) | No (auto-detect) |
 | `SLURM_UNIX_SOCKET` | Unix socket path | No |
 | `MCP_BEARER_TOKEN` | Bearer token for SSE transport | Yes (SSE mode) |
+| `MCP_ACCESS_LEVEL` | RBAC access level | No (default: admin) |
+| `MCP_AUDIT_LOG` | Audit log file path | No (disabled) |
 
 ## Adding New Versions
 
