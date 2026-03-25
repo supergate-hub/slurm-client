@@ -106,10 +106,14 @@ func main() {
 		"slurm-mcp",
 		"3.0.0",
 		server.WithToolCapabilities(false),
+		server.WithResourceCapabilities(true, false),
+		server.WithPromptCapabilities(false),
 	)
 
 	registerSlurmTools(s, &resolver)
 	registerSlurmdbTools(s, &resolver)
+	registerResources(s, &resolver, mgr)
+	registerPrompts(s, &resolver, mgr)
 
 	if resolver.isMultiCluster() {
 		registerMultiClusterTools(s, mgr)
