@@ -67,14 +67,57 @@ func main() {
 }
 ```
 
+## Multi-Cluster
+
+```go
+// Create a Manager for multiple clusters
+manager, err := slurm.NewManager(ctx, slurm.ManagerOpts{
+    Clusters: map[string]slurm.AuthOpts{
+        "gpu": {Endpoint: "http://gpu-cluster:6820", AuthToken: "token1"},
+        "cpu": {Endpoint: "http://cpu-cluster:6820", AuthToken: "token2"},
+    },
+})
+
+// Access a specific cluster
+client, _ := manager.Cluster("gpu")
+jobs, _ := client.Slurm.Jobs().List(ctx)
+
+// Query all clusters in parallel
+allJobs, _ := manager.AllJobs(ctx)  // []ClusterResult[[]Job]
+for _, r := range allJobs {
+    fmt.Printf("[%s] %d jobs (err=%v)\n", r.Cluster, len(r.Data), r.Err)
+}
+```
+
+Or load from a YAML config file:
+
+```yaml
+# clusters.yaml
+clusters:
+  gpu:
+    endpoint: http://gpu-cluster:6820
+    token: ${GPU_SLURM_TOKEN}
+  cpu:
+    endpoint: http://cpu-cluster:6820
+    token: ${CPU_SLURM_TOKEN}
+```
+
+```go
+opts, _ := slurm.ParseConfig("clusters.yaml")
+manager, _ := slurm.NewManager(ctx, *opts)
+```
+
 ## Features
 
 - **Proxy pattern**: `client.Slurm.Jobs().List(ctx)` — IDE auto-completion at every level
+- **Multi-cluster Manager**: `manager.Cluster("gpu").Slurm.Jobs().List(ctx)` — route to specific clusters
+- **Cross-cluster queries**: `manager.AllJobs(ctx)` — parallel queries with partial-failure tolerance
+- **YAML config**: `clusters.yaml` with `${ENV_VAR}` expansion for multi-cluster setup
 - **Version auto-detection**: omit `Version` and the SDK queries slurmrestd's `/openapi` endpoint
 - **Retry with backoff**: automatic retry on 503, 429, and connection errors
 - **Structured logging**: pass `*slog.Logger` via `AuthOpts.Logger` (tokens always masked)
 - **Unix socket support**: set `AuthOpts.UnixSocket` for local slurmrestd connections
-- **Full v0.0.40 coverage**: 9 Slurm resources + 11 SlurmDB resources
+- **Full API coverage**: 9 Slurm resources + 11 SlurmDB resources (v0.0.39 ~ v0.0.44)
 - **Mock server**: `slurmtest` package for unit testing
 
 ## Supported Resources
@@ -161,25 +204,36 @@ func TestMyCode(t *testing.T) {
 
 ## MCP Server
 
-The project includes an MCP (Model Context Protocol) server that enables AI agents
-like Claude to manage Slurm clusters directly.
+MCP (Model Context Protocol) server that enables AI agents like Claude to manage
+Slurm clusters directly. Supports single-cluster, multi-cluster, stdio, and SSE transports.
 
-### Build
+### Build & Run
 
 ```bash
 go build -o slurm-mcp ./cmd/slurm-mcp/
+
+# Single-cluster (stdio — for Claude Desktop/Code)
+SLURM_ENDPOINT=http://slurmctld:6820 SLURM_TOKEN=<jwt> ./slurm-mcp
+
+# Multi-cluster (stdio)
+./slurm-mcp --config clusters.yaml
+
+# SSE transport (remote/Docker — network-accessible)
+./slurm-mcp --config clusters.yaml --transport=sse --port=8080 --bearer-token=secret
 ```
 
-### Run
+### Docker
 
 ```bash
-SLURM_ENDPOINT=http://slurmctld:6820 SLURM_TOKEN=<jwt> ./slurm-mcp
+docker build -t slurm-mcp .
+docker run -p 8080:8080 \
+  -v ./clusters.yaml:/etc/slurm-mcp/clusters.yaml \
+  -e MCP_BEARER_TOKEN=secret \
+  slurm-mcp --config /etc/slurm-mcp/clusters.yaml
 ```
 
 ### Claude Desktop
 
-Add to `claude_desktop_config.json`:
-
 ```json
 {
   "mcpServers": {
@@ -194,27 +248,9 @@ Add to `claude_desktop_config.json`:
 }
 ```
 
-### Claude Code
+### Available Tools (29)
 
-Add to `.claude/settings.json`:
-
-```json
-{
-  "mcpServers": {
-    "slurm": {
-      "command": "/path/to/slurm-mcp",
-      "env": {
-        "SLURM_ENDPOINT": "http://slurmctld:6820",
-        "SLURM_TOKEN": "your-jwt-token"
-      }
-    }
-  }
-}
-```
-
-### Available Tools (24)
-
-**Slurm API:**
+**Slurm API (all tools accept optional `cluster` parameter):**
 `slurm_ping`, `slurm_list_jobs`, `slurm_get_job`, `slurm_submit_job`,
 `slurm_cancel_job`, `slurm_list_nodes`, `slurm_get_node`,
 `slurm_list_partitions`, `slurm_get_partition`, `slurm_list_reservations`,
@@ -226,14 +262,29 @@ Add to `.claude/settings.json`:
 `slurmdb_list_clusters`, `slurmdb_list_qos`, `slurmdb_list_associations`,
 `slurmdb_list_tres`, `slurmdb_list_wckeys`, `slurmdb_diag`
 
+**Multi-Cluster Tools (available in multi-cluster mode):**
+`slurm_list_clusters`, `slurm_cluster_status`, `slurm_cross_cluster_jobs`,
+`slurm_node_health_summary`, `slurm_resource_availability`
+
+### MCP Resources
+
+Read-only data automatically available as context to AI agents:
+`slurm://{cluster}/nodes`, `slurm://{cluster}/jobs`, `slurm://{cluster}/partitions`
+
+### MCP Prompts
+
+Pre-built prompt templates for common scenarios:
+`cluster-status-summary`, `job-queue-analysis`, `node-troubleshooting`
+
 ### Environment Variables
 
 | Variable | Description | Required |
 |----------|------------|----------|
-| `SLURM_ENDPOINT` | slurmrestd URL | Yes (or `SLURM_UNIX_SOCKET`) |
-| `SLURM_TOKEN` | JWT token | Yes |
+| `SLURM_ENDPOINT` | slurmrestd URL | Yes (single-cluster, or `SLURM_UNIX_SOCKET`) |
+| `SLURM_TOKEN` | JWT token | Yes (single-cluster) |
 | `SLURM_VERSION` | API version (e.g., `v0.0.40`) | No (auto-detect) |
 | `SLURM_UNIX_SOCKET` | Unix socket path | No |
+| `MCP_BEARER_TOKEN` | Bearer token for SSE transport | Yes (SSE mode) |
 
 ## Adding New Versions
 
