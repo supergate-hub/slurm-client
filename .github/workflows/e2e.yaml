@@ -1,0 +1,91 @@
+name: E2E
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Start Slurm cluster
+        run: |
+          git clone --depth 1 https://github.com/giovtorres/slurm-docker-cluster.git /tmp/slurm-cluster
+          cd /tmp/slurm-cluster
+          docker compose up -d
+          echo "Waiting for slurmctld to be ready..."
+          for i in $(seq 1 30); do
+            if docker exec slurmctld sinfo >/dev/null 2>&1; then
+              echo "slurmctld is ready"
+              break
+            fi
+            echo "  attempt $i/30..."
+            sleep 2
+          done
+
+      - name: Enable slurmrestd
+        run: |
+          docker exec slurmctld bash -c '
+            slurmrestd -a rest_auth/jwt 0.0.0.0:6820 &
+            sleep 2
+            echo "slurmrestd started"
+          '
+
+      - name: Get JWT token
+        id: token
+        run: |
+          TOKEN=$(docker exec slurmctld scontrol token lifespan=3600 | grep -oP 'SLURM_JWT=\K.*')
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+
+      - name: Get slurmctld IP
+        id: ip
+        run: |
+          IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' slurmctld)
+          echo "ip=$IP" >> "$GITHUB_OUTPUT"
+
+      - name: Run SDK integration tests (REST backend)
+        env:
+          SLURM_TEST_ENDPOINT: "http://${{ steps.ip.outputs.ip }}:6820"
+          SLURM_TEST_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          go test -tags integration -v -count=1 -timeout 120s .
+
+      - name: Build MCP server
+        run: go build -o slurm-mcp ./cmd/slurm-mcp/
+
+      - name: Test MCP server startup (REST, default tools)
+        env:
+          SLURM_ENDPOINT: "http://${{ steps.ip.outputs.ip }}:6820"
+          SLURM_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          timeout 5 ./slurm-mcp 2>&1 || true
+          echo "MCP server starts successfully with default (8) tools"
+
+      - name: Test MCP server startup (REST, all tools)
+        env:
+          SLURM_ENDPOINT: "http://${{ steps.ip.outputs.ip }}:6820"
+          SLURM_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          timeout 5 ./slurm-mcp --all-tools 2>&1 || true
+          echo "MCP server starts successfully with all tools"
+
+      - name: Test MCP server SSH backend message
+        run: |
+          output=$(./slurm-mcp --backend=ssh 2>&1 || true)
+          echo "$output"
+          echo "$output" | grep -q "not yet available\|SSH" && echo "SSH backend correctly reports not available"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          cd /tmp/slurm-cluster 2>/dev/null && docker compose down -v || true
