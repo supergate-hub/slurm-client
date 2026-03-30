@@ -9,7 +9,7 @@ on:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
@@ -22,24 +22,20 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/giovtorres/slurm-docker-cluster.git /tmp/slurm-cluster
           cd /tmp/slurm-cluster
+          cp .env.example .env 2>/dev/null || true
+          docker compose build
           docker compose up -d
-          echo "Waiting for slurmctld to be ready..."
-          for i in $(seq 1 30); do
-            if docker exec slurmctld sinfo >/dev/null 2>&1; then
-              echo "slurmctld is ready"
-              break
-            fi
-            echo "  attempt $i/30..."
-            sleep 2
-          done
 
-      - name: Enable slurmrestd
+      - name: Wait for slurmrestd to be healthy
         run: |
-          docker exec slurmctld bash -c '
-            slurmrestd -a rest_auth/jwt 0.0.0.0:6820 &
-            sleep 2
-            echo "slurmrestd started"
+          echo "Waiting for slurmrestd to be healthy..."
+          timeout 120 bash -c '
+            until docker compose -f /tmp/slurm-cluster/docker-compose.yml ps slurmrestd 2>/dev/null | grep -q "healthy"; do
+              echo "  waiting..."
+              sleep 5
+            done
           '
+          echo "slurmrestd is healthy"
 
       - name: Get JWT token
         id: token
@@ -47,15 +43,16 @@ jobs:
           TOKEN=$(docker exec slurmctld scontrol token lifespan=3600 | grep -oP 'SLURM_JWT=\K.*')
           echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
 
-      - name: Get slurmctld IP
-        id: ip
+      - name: Verify slurmrestd connectivity
         run: |
-          IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' slurmctld)
-          echo "ip=$IP" >> "$GITHUB_OUTPUT"
+          TOKEN=${{ steps.token.outputs.token }}
+          curl -sf -H "Authorization: Bearer $TOKEN" http://localhost:6820/openapi/v3 | head -c 200
+          echo ""
+          echo "slurmrestd is accessible on localhost:6820"
 
       - name: Run SDK integration tests (REST backend)
         env:
-          SLURM_TEST_ENDPOINT: "http://${{ steps.ip.outputs.ip }}:6820"
+          SLURM_TEST_ENDPOINT: "http://localhost:6820"
           SLURM_TEST_TOKEN: ${{ steps.token.outputs.token }}
         run: |
           go test -tags integration -v -count=1 -timeout 120s .
@@ -65,7 +62,7 @@ jobs:
 
       - name: Test MCP server startup (REST, default tools)
         env:
-          SLURM_ENDPOINT: "http://${{ steps.ip.outputs.ip }}:6820"
+          SLURM_ENDPOINT: "http://localhost:6820"
           SLURM_TOKEN: ${{ steps.token.outputs.token }}
         run: |
           timeout 5 ./slurm-mcp 2>&1 || true
@@ -73,7 +70,7 @@ jobs:
 
       - name: Test MCP server startup (REST, all tools)
         env:
-          SLURM_ENDPOINT: "http://${{ steps.ip.outputs.ip }}:6820"
+          SLURM_ENDPOINT: "http://localhost:6820"
           SLURM_TOKEN: ${{ steps.token.outputs.token }}
         run: |
           timeout 5 ./slurm-mcp --all-tools 2>&1 || true
