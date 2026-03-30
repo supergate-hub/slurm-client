@@ -5,21 +5,225 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg?style=for-the-badge)](./LICENSES/Apache-2.0.txt)
 [![Tag](https://img.shields.io/github/v/tag/supergate-hub/slurm-client?style=for-the-badge)](https://github.com/supergate-hub/slurm-client/tags/)
 [![Go-Version](https://img.shields.io/github/go-mod/go-version/supergate-hub/slurm-client?style=for-the-badge)](./go.mod)
+[![E2E](https://img.shields.io/github/actions/workflow/status/supergate-hub/slurm-client/e2e.yaml?style=for-the-badge&label=E2E)](https://github.com/supergate-hub/slurm-client/actions/workflows/e2e.yaml)
+
+**MCP server + Go SDK for [Slurm][slurm] HPC clusters.**
+
+Let AI agents manage your Slurm cluster via natural language,
+or use the Go SDK for programmatic control.
 
 </div>
 
-Go SDK for the [Slurm REST API][rest-api], inspired by [openstacksdk]. Provides a proxy-style client with IDE-friendly auto-completion chains.
-
+[slurm]: https://slurm.schedmd.com/
 [rest-api]: https://slurm.schedmd.com/rest_api.html
 [openstacksdk]: https://docs.openstack.org/openstacksdk/latest/
+[mcp]: https://modelcontextprotocol.io/
 
-## Install
+## Architecture
+
+```
+                          ┌──────────────────────────────┐
+                          │       AI Agent / Claude       │
+                          └──────────┬───────────────────┘
+                                     │  MCP (stdio / SSE)
+                          ┌──────────▼───────────────────┐
+                          │       slurm-mcp server        │
+                          │                               │
+                          │  8 core tools (default)       │
+                          │  31 tools (--all-tools)       │
+                          │  RBAC + audit logging         │
+                          └──────────┬───────────────────┘
+                                     │
+                      ┌──────────────┼──────────────┐
+                      │              │              │
+               ┌──────▼──────┐      │       ┌──────▼──────┐
+               │ REST Backend │      │       │ SSH Backend  │
+               │  (Go SDK)    │      │       │  (CLI exec)  │
+               └──────┬──────┘      │       └──────┬──────┘
+                      │             │              │
+                  HTTP/Unix         │          SSH conn
+                      │             │              │
+                 slurmrestd    Multi-cluster   squeue/sbatch
+                               Manager        scontrol/sacctmgr
+```
+
+## MCP Server
+
+The MCP server enables AI agents like Claude to manage Slurm clusters via natural language.
+Single Go binary, no Python, no pip, no SSH configuration required for REST mode.
+
+### Quick Start (2 minutes)
+
+**1. Download**
+
+```bash
+go install github.com/supergate-hub/slurm-client/cmd/slurm-mcp@latest
+# or download from GitHub Releases
+```
+
+**2. Configure Claude Desktop**
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "slurm": {
+      "command": "slurm-mcp",
+      "env": {
+        "SLURM_ENDPOINT": "http://slurmctld:6820",
+        "SLURM_TOKEN": "your-jwt-token"
+      }
+    }
+  }
+}
+```
+
+**3. Restart Claude Desktop.** Ask Claude: "Show me all running jobs on the cluster."
+
+### Backend Modes
+
+```bash
+# REST backend (default) - requires slurmrestd
+SLURM_ENDPOINT=http://slurmctld:6820 SLURM_TOKEN=<jwt> slurm-mcp
+
+# SSH backend - for clusters without slurmrestd
+slurm-mcp --backend=ssh  # (coming soon)
+
+# Multi-cluster
+slurm-mcp --config clusters.yaml
+
+# SSE transport (remote / Docker)
+slurm-mcp --config clusters.yaml --transport=sse --port=8080 --bearer-token=secret
+
+# All tools (default: 8 core tools)
+slurm-mcp --all-tools
+```
+
+### Core Tools (default)
+
+These 8 tools are exposed by default. Use `--all-tools` to enable all 31.
+
+| Tool | Description |
+|------|------------|
+| `slurm_ping` | Cluster health check |
+| `slurm_list_jobs` | List running/pending jobs |
+| `slurm_get_job` | Job details |
+| `slurm_submit_job` | Submit a job script |
+| `slurm_cancel_job` | Cancel a job |
+| `slurm_list_nodes` | Node status overview |
+| `slurm_list_partitions` | Partition info |
+| `slurm_queue_depth` | Queue depth analysis |
+
+### All Tools (31)
+
+<details>
+<summary>Expand full tool list</summary>
+
+**Slurm API** (all tools accept optional `cluster` parameter):
+
+`slurm_ping`, `slurm_list_jobs`, `slurm_get_job`, `slurm_submit_job`,
+`slurm_cancel_job`, `slurm_list_nodes`, `slurm_get_node`,
+`slurm_list_partitions`, `slurm_get_partition`, `slurm_list_reservations`,
+`slurm_list_licenses`, `slurm_diag`
+
+**SlurmDB API:**
+
+`slurmdb_list_accounts`, `slurmdb_get_account`, `slurmdb_list_users`,
+`slurmdb_get_user`, `slurmdb_list_jobs`, `slurmdb_get_job`,
+`slurmdb_list_clusters`, `slurmdb_list_qos`, `slurmdb_list_associations`,
+`slurmdb_list_tres`, `slurmdb_list_wckeys`, `slurmdb_diag`
+
+**Multi-Cluster Tools** (multi-cluster mode only):
+
+`slurm_list_clusters`, `slurm_cluster_status`, `slurm_cross_cluster_jobs`,
+`slurm_node_health_summary`, `slurm_resource_availability`
+
+**Analysis Tools:**
+
+`slurm_gpu_allocation`, `slurm_queue_depth`
+
+</details>
+
+### MCP Resources
+
+Read-only data automatically available as context to AI agents:
+
+`slurm://{cluster}/nodes`, `slurm://{cluster}/jobs`, `slurm://{cluster}/partitions`
+
+### MCP Prompts
+
+Pre-built prompt templates: `cluster-status-summary`, `job-queue-analysis`, `node-troubleshooting`
+
+### RBAC & Audit Logging
+
+Control which operations AI agents can perform:
+
+```yaml
+# In clusters.yaml
+rbac:
+  default_access: operator  # read-only | operator | admin
+  audit_log: /var/log/slurm-mcp-audit.jsonl
+```
+
+```bash
+# Or via environment variables
+MCP_ACCESS_LEVEL=read-only MCP_AUDIT_LOG=/tmp/audit.log slurm-mcp
+```
+
+| Access Level | Allowed Operations |
+|-------------|-------------------|
+| `read-only` | List, Get, Ping, Diag (all read operations) |
+| `operator` | Read + Submit job, Cancel job |
+| `admin` | All operations (default) |
+
+### Docker
+
+```bash
+docker build -t slurm-mcp .
+docker run -p 8080:8080 \
+  -v ./clusters.yaml:/etc/slurm-mcp/clusters.yaml \
+  -e MCP_BEARER_TOKEN=secret \
+  slurm-mcp --config /etc/slurm-mcp/clusters.yaml
+```
+
+### Environment Variables
+
+| Variable | Description | Required |
+|----------|------------|----------|
+| `SLURM_ENDPOINT` | slurmrestd URL | Yes (single-cluster) |
+| `SLURM_TOKEN` | JWT token | Yes (single-cluster) |
+| `SLURM_VERSION` | API version (e.g., `v0.0.40`) | No (auto-detect) |
+| `SLURM_UNIX_SOCKET` | Unix socket path | No |
+| `MCP_BEARER_TOKEN` | Bearer token for SSE transport | Yes (SSE mode) |
+| `MCP_ACCESS_LEVEL` | RBAC access level | No (default: admin) |
+| `MCP_AUDIT_LOG` | Audit log file path | No |
+
+### Flags
+
+| Flag | Description | Default |
+|------|------------|---------|
+| `--config` | Path to clusters.yaml | — |
+| `--transport` | Transport: `stdio` or `sse` | `stdio` |
+| `--port` | Port for SSE transport | `8080` |
+| `--bearer-token` | Auth token for SSE | — |
+| `--all-tools` | Expose all 31 tools | `false` (8 core) |
+| `--backend` | Backend: `rest` or `ssh` | `rest` |
+
+---
+
+## Go SDK
+
+Go SDK for the [Slurm REST API][rest-api], inspired by [openstacksdk].
+Proxy-style client with IDE-friendly auto-completion chains.
+
+### Install
 
 ```bash
 go get github.com/supergate-hub/slurm-client
 ```
 
-## Quick Start
+### Quick Start
 
 ```go
 package main
@@ -67,10 +271,9 @@ func main() {
 }
 ```
 
-## Multi-Cluster
+### Multi-Cluster
 
 ```go
-// Create a Manager for multiple clusters
 manager, err := slurm.NewManager(ctx, slurm.ManagerOpts{
     Clusters: map[string]slurm.AuthOpts{
         "gpu": {Endpoint: "http://gpu-cluster:6820", AuthToken: "token1"},
@@ -78,18 +281,17 @@ manager, err := slurm.NewManager(ctx, slurm.ManagerOpts{
     },
 })
 
-// Access a specific cluster
 client, _ := manager.Cluster("gpu")
 jobs, _ := client.Slurm.Jobs().List(ctx)
 
 // Query all clusters in parallel
-allJobs, _ := manager.AllJobs(ctx)  // []ClusterResult[[]Job]
+allJobs, _ := manager.AllJobs(ctx)
 for _, r := range allJobs {
     fmt.Printf("[%s] %d jobs (err=%v)\n", r.Cluster, len(r.Data), r.Err)
 }
 ```
 
-Or load from a YAML config file:
+Or load from YAML:
 
 ```yaml
 # clusters.yaml
@@ -107,22 +309,22 @@ opts, _ := slurm.ParseConfig("clusters.yaml")
 manager, _ := slurm.NewManager(ctx, *opts)
 ```
 
-## Features
+### SDK Features
 
-- **Proxy pattern**: `client.Slurm.Jobs().List(ctx)` — IDE auto-completion at every level
-- **Multi-cluster Manager**: `manager.Cluster("gpu").Slurm.Jobs().List(ctx)` — route to specific clusters
-- **Cross-cluster queries**: `manager.AllJobs(ctx)` — parallel queries with partial-failure tolerance
-- **YAML config**: `clusters.yaml` with `${ENV_VAR}` expansion for multi-cluster setup
-- **Version auto-detection**: omit `Version` and the SDK queries slurmrestd's `/openapi` endpoint
+- **Proxy pattern**: `client.Slurm.Jobs().List(ctx)` with IDE auto-completion
+- **Multi-cluster Manager**: route to specific clusters or query all in parallel
+- **YAML config**: `clusters.yaml` with `${ENV_VAR}` expansion
+- **Version auto-detection**: queries slurmrestd's `/openapi` endpoint
 - **Retry with backoff**: automatic retry on 503, 429, and connection errors
-- **Structured logging**: pass `*slog.Logger` via `AuthOpts.Logger` (tokens always masked)
-- **Unix socket support**: set `AuthOpts.UnixSocket` for local slurmrestd connections
-- **Full API coverage**: 9 Slurm resources + 11 SlurmDB resources (v0.0.39 ~ v0.0.44)
+- **Structured logging**: `*slog.Logger` via `AuthOpts.Logger` (tokens always masked)
+- **Unix socket support**: `AuthOpts.UnixSocket` for local slurmrestd
+- **Full API coverage**: 9 Slurm + 11 SlurmDB resources (v0.0.39 ~ v0.0.44)
 - **Mock server**: `slurmtest` package for unit testing
 
-## Supported Resources
+### Supported Resources
 
-### Slurm API
+<details>
+<summary>Slurm API</summary>
 
 | Resource | Operations |
 |----------|-----------|
@@ -136,7 +338,10 @@ manager, _ := slurm.NewManager(ctx, *opts)
 | Ping | Get |
 | Reconfigure | Reconfigure |
 
-### SlurmDB API
+</details>
+
+<details>
+<summary>SlurmDB API</summary>
 
 | Resource | Operations |
 |----------|-----------|
@@ -152,7 +357,9 @@ manager, _ := slurm.NewManager(ctx, *opts)
 | Config | Get |
 | Diag | Get |
 
-## Testing with Mock Server
+</details>
+
+### Testing with Mock Server
 
 ```go
 import (
@@ -178,7 +385,7 @@ func TestMyCode(t *testing.T) {
 }
 ```
 
-## Configuration
+### SDK Configuration
 
 | Option | Description | Default |
 |--------|------------|---------|
@@ -191,7 +398,7 @@ func TestMyCode(t *testing.T) {
 | `MaxRetries` | Max retry attempts | 3 |
 | `RetryBaseDelay` | Base delay for exponential backoff | 500ms |
 
-## Supported Versions
+### Supported Slurm Versions
 
 | Constant | Slurm API Version |
 |----------|-------------------|
@@ -202,125 +409,10 @@ func TestMyCode(t *testing.T) {
 | `V0043` | v0.0.43 |
 | `V0044` | v0.0.44 |
 
-## MCP Server
-
-MCP (Model Context Protocol) server that enables AI agents like Claude to manage
-Slurm clusters directly. Supports single-cluster, multi-cluster, stdio, and SSE transports.
-
-### Build & Run
-
-```bash
-go build -o slurm-mcp ./cmd/slurm-mcp/
-
-# Single-cluster (stdio — for Claude Desktop/Code)
-SLURM_ENDPOINT=http://slurmctld:6820 SLURM_TOKEN=<jwt> ./slurm-mcp
-
-# Multi-cluster (stdio)
-./slurm-mcp --config clusters.yaml
-
-# SSE transport (remote/Docker — network-accessible)
-./slurm-mcp --config clusters.yaml --transport=sse --port=8080 --bearer-token=secret
-```
-
-### Docker
-
-```bash
-docker build -t slurm-mcp .
-docker run -p 8080:8080 \
-  -v ./clusters.yaml:/etc/slurm-mcp/clusters.yaml \
-  -e MCP_BEARER_TOKEN=secret \
-  slurm-mcp --config /etc/slurm-mcp/clusters.yaml
-```
-
-### Claude Desktop
-
-```json
-{
-  "mcpServers": {
-    "slurm": {
-      "command": "/path/to/slurm-mcp",
-      "env": {
-        "SLURM_ENDPOINT": "http://slurmctld:6820",
-        "SLURM_TOKEN": "your-jwt-token"
-      }
-    }
-  }
-}
-```
-
-### Available Tools (31)
-
-**Slurm API (all tools accept optional `cluster` parameter):**
-`slurm_ping`, `slurm_list_jobs`, `slurm_get_job`, `slurm_submit_job`,
-`slurm_cancel_job`, `slurm_list_nodes`, `slurm_get_node`,
-`slurm_list_partitions`, `slurm_get_partition`, `slurm_list_reservations`,
-`slurm_list_licenses`, `slurm_diag`
-
-**SlurmDB API:**
-`slurmdb_list_accounts`, `slurmdb_get_account`, `slurmdb_list_users`,
-`slurmdb_get_user`, `slurmdb_list_jobs`, `slurmdb_get_job`,
-`slurmdb_list_clusters`, `slurmdb_list_qos`, `slurmdb_list_associations`,
-`slurmdb_list_tres`, `slurmdb_list_wckeys`, `slurmdb_diag`
-
-**Multi-Cluster Tools (available in multi-cluster mode):**
-`slurm_list_clusters`, `slurm_cluster_status`, `slurm_cross_cluster_jobs`,
-`slurm_node_health_summary`, `slurm_resource_availability`
-
-**Analysis Tools:**
-`slurm_gpu_allocation`, `slurm_queue_depth`
-
-### MCP Resources
-
-Read-only data automatically available as context to AI agents:
-`slurm://{cluster}/nodes`, `slurm://{cluster}/jobs`, `slurm://{cluster}/partitions`
-
-### MCP Prompts
-
-Pre-built prompt templates for common scenarios:
-`cluster-status-summary`, `job-queue-analysis`, `node-troubleshooting`
-
-### RBAC & Audit Logging
-
-Control which operations AI agents can perform:
-
-```yaml
-# In clusters.yaml
-rbac:
-  default_access: operator  # read-only | operator | admin
-  audit_log: /var/log/slurm-mcp-audit.jsonl
-```
-
-Or via environment variables:
-
-```bash
-MCP_ACCESS_LEVEL=read-only MCP_AUDIT_LOG=/tmp/audit.log ./slurm-mcp
-```
-
-| Access Level | Allowed Operations |
-|-------------|-------------------|
-| `read-only` | List, Get, Ping, Diag (all read operations) |
-| `operator` | Read + Submit job, Cancel job |
-| `admin` | All operations (default) |
-
-### Environment Variables
-
-| Variable | Description | Required |
-|----------|------------|----------|
-| `SLURM_ENDPOINT` | slurmrestd URL | Yes (single-cluster, or `SLURM_UNIX_SOCKET`) |
-| `SLURM_TOKEN` | JWT token | Yes (single-cluster) |
-| `SLURM_VERSION` | API version (e.g., `v0.0.40`) | No (auto-detect) |
-| `SLURM_UNIX_SOCKET` | Unix socket path | No |
-| `MCP_BEARER_TOKEN` | Bearer token for SSE transport | Yes (SSE mode) |
-| `MCP_ACCESS_LEVEL` | RBAC access level | No (default: admin) |
-| `MCP_AUDIT_LOG` | Audit log file path | No (disabled) |
-
 ## Adding New Versions
 
 ```bash
-# Generate OpenAPI client for a new version
 ./hack/generate-version.sh v0.0.45 path/to/openapi-spec.json
-
-# Check compatibility with new spec
 ./hack/check-compat.sh path/to/new-spec.json
 ```
 
