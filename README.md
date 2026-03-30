@@ -21,30 +21,48 @@ or use the Go SDK for programmatic control.
 
 ## Architecture
 
-```
-                          ┌──────────────────────────────┐
-                          │       AI Agent / Claude       │
-                          └──────────┬───────────────────┘
-                                     │  MCP (stdio / SSE)
-                          ┌──────────▼───────────────────┐
-                          │       slurm-mcp server        │
-                          │                               │
-                          │  8 core tools (default)       │
-                          │  31 tools (--all-tools)       │
-                          │  RBAC + audit logging         │
-                          └──────────┬───────────────────┘
-                                     │
-                      ┌──────────────┼──────────────┐
-                      │              │              │
-               ┌──────▼──────┐      │       ┌──────▼──────┐
-               │ REST Backend │      │       │ SSH Backend  │
-               │  (Go SDK)    │      │       │  (CLI exec)  │
-               └──────┬──────┘      │       └──────┬──────┘
-                      │             │              │
-                  HTTP/Unix         │          SSH conn
-                      │             │              │
-                 slurmrestd    Multi-cluster   squeue/sbatch
-                               Manager        scontrol/sacctmgr
+```mermaid
+graph TD
+    Agent["🤖 AI Agent / Claude"]
+
+    subgraph MCP["slurm-mcp server"]
+        direction TB
+        Tools["Tool Gating\n8 core · 31 with --all-tools"]
+        RBAC["RBAC + Audit Logging"]
+        Backend["MCPBackend Interface"]
+        Tools --> RBAC --> Backend
+    end
+
+    Agent -- "MCP (stdio / SSE)" --> MCP
+
+    subgraph REST["REST Backend"]
+        SDK["Go SDK"]
+        SDK -- "HTTP / Unix Socket" --> slurmrestd["slurmrestd"]
+    end
+
+    subgraph SSH["SSH Backend"]
+        CLI["CLI Executor"]
+        CLI -- "SSH" --> cmds["squeue · sbatch\nscontrol · sacctmgr"]
+    end
+
+    Backend --> SDK
+    Backend --> CLI
+
+    subgraph Clusters["Slurm Clusters"]
+        direction LR
+        C1["GPU Cluster"]
+        C2["CPU Cluster"]
+        C3["Training Cluster"]
+    end
+
+    slurmrestd --> Clusters
+    cmds --> Clusters
+
+    style MCP fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
+    style REST fill:#dcfce7,stroke:#22c55e,stroke-width:2px
+    style SSH fill:#ffedd5,stroke:#f97316,stroke-width:2px
+    style Clusters fill:#f3f4f6,stroke:#6b7280,stroke-width:1px
+    style Agent fill:#ede9fe,stroke:#8b5cf6,stroke-width:2px
 ```
 
 ## MCP Server
