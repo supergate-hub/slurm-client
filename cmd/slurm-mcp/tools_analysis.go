@@ -6,12 +6,11 @@ import (
 	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
 
 	slurmclient "github.com/supergate-hub/slurm-client"
 )
 
-func registerAnalysisTools(s *server.MCPServer, cr *clusterResolver, mgr *slurmclient.Manager) {
+func registerAnalysisTools(s toolAdder, cr *clusterResolver, mgr *slurmclient.Manager, rbac *RBAC) {
 	clusterDesc := ""
 	if cr.isMultiCluster() {
 		clusterDesc = " Use the 'cluster' parameter to target a specific cluster."
@@ -24,6 +23,9 @@ func registerAnalysisTools(s *server.MCPServer, cr *clusterResolver, mgr *slurmc
 			"Note: this shows GRES allocation from Slurm's perspective, not real-time GPU utilization (nvidia-smi level)."+clusterDesc),
 		mcp.WithString("cluster", mcp.Description("Target cluster name (required in multi-cluster mode)")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if err := checkRBAC(rbac, "slurm_gpu_allocation"); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
 		if mgr != nil && cr.isMultiCluster() {
 			// Multi-cluster: aggregate across all clusters
 			results := mgr.AllNodes(ctx)
@@ -62,6 +64,9 @@ func registerAnalysisTools(s *server.MCPServer, cr *clusterResolver, mgr *slurmc
 			"Helps identify bottlenecks and resource contention."+clusterDesc),
 		mcp.WithString("cluster", mcp.Description("Target cluster name (required in multi-cluster mode)")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if err := checkRBAC(rbac, "slurm_queue_depth"); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
 		if mgr != nil && cr.isMultiCluster() {
 			results := mgr.AllJobs(ctx)
 			type clusterQueue struct {
@@ -155,13 +160,13 @@ func extractGresFromNodes(nodes interface{}) []nodeGres {
 }
 
 type queueInfo struct {
-	Total        int                       `json:"total_jobs"`
-	Running      int                       `json:"running"`
-	Pending      int                       `json:"pending"`
-	Other        int                       `json:"other"`
-	ByPartition  map[string]partitionQueue `json:"by_partition"`
-	ByUser       map[string]userQueue      `json:"by_user"`
-	TopPending   []pendingJob              `json:"top_pending,omitempty"`
+	Total       int                       `json:"total_jobs"`
+	Running     int                       `json:"running"`
+	Pending     int                       `json:"pending"`
+	Other       int                       `json:"other"`
+	ByPartition map[string]partitionQueue `json:"by_partition"`
+	ByUser      map[string]userQueue      `json:"by_user"`
+	TopPending  []pendingJob              `json:"top_pending,omitempty"`
 }
 
 type partitionQueue struct {

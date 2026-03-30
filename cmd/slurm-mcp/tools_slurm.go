@@ -6,12 +6,15 @@ import (
 	"fmt"
 
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
-
-	slurmclient "github.com/supergate-hub/slurm-client"
 )
 
-func registerSlurmTools(s *server.MCPServer, cr *clusterResolver) {
+// toolAdder is the interface for registering MCP tools.
+// Both *server.MCPServer and *toolRegistrar satisfy this.
+type toolAdder interface {
+	AddTool(tool mcp.Tool, handler func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error))
+}
+
+func registerSlurmTools(s toolAdder, cr *clusterResolver, rbac *RBAC) {
 	clusterDesc := ""
 	if cr.isMultiCluster() {
 		clusterDesc = " Use the 'cluster' parameter to target a specific cluster."
@@ -22,15 +25,18 @@ func registerSlurmTools(s *server.MCPServer, cr *clusterResolver) {
 		mcp.WithDescription("List all jobs in the Slurm cluster."+clusterDesc),
 		mcp.WithString("cluster", mcp.Description("Target cluster name (required in multi-cluster mode)")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		client, err := cr.resolve(req)
+		if err := checkRBAC(rbac, "slurm_list_jobs"); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		backend, err := cr.resolveBackend(req)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		jobs, err := client.Slurm.Jobs().List(ctx)
+		result, err := backend.ListJobs(ctx)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		return jsonResult(jobs)
+		return mcp.NewToolResultText(result), nil
 	})
 
 	s.AddTool(mcp.NewTool("slurm_get_job",
@@ -38,7 +44,10 @@ func registerSlurmTools(s *server.MCPServer, cr *clusterResolver) {
 		mcp.WithString("job_id", mcp.Required(), mcp.Description("The Slurm job ID")),
 		mcp.WithString("cluster", mcp.Description("Target cluster name (required in multi-cluster mode)")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		client, err := cr.resolve(req)
+		if err := checkRBAC(rbac, "slurm_get_job"); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		backend, err := cr.resolveBackend(req)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -46,11 +55,11 @@ func registerSlurmTools(s *server.MCPServer, cr *clusterResolver) {
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		job, err := client.Slurm.Jobs().Get(ctx, jobID)
+		result, err := backend.GetJob(ctx, jobID)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		return jsonResult(job)
+		return mcp.NewToolResultText(result), nil
 	})
 
 	s.AddTool(mcp.NewTool("slurm_submit_job",
@@ -58,7 +67,10 @@ func registerSlurmTools(s *server.MCPServer, cr *clusterResolver) {
 		mcp.WithString("script", mcp.Required(), mcp.Description("The batch script content")),
 		mcp.WithString("cluster", mcp.Description("Target cluster name (required in multi-cluster mode)")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		client, err := cr.resolve(req)
+		if err := checkRBAC(rbac, "slurm_submit_job"); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		backend, err := cr.resolveBackend(req)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -66,13 +78,11 @@ func registerSlurmTools(s *server.MCPServer, cr *clusterResolver) {
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		result, err := client.Slurm.Jobs().Submit(ctx, slurmclient.JobSubmitOpts{
-			Script: script,
-		})
+		result, err := backend.SubmitJob(ctx, script)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		return jsonResult(result)
+		return mcp.NewToolResultText(result), nil
 	})
 
 	s.AddTool(mcp.NewTool("slurm_cancel_job",
@@ -80,7 +90,10 @@ func registerSlurmTools(s *server.MCPServer, cr *clusterResolver) {
 		mcp.WithString("job_id", mcp.Required(), mcp.Description("The Slurm job ID to cancel")),
 		mcp.WithString("cluster", mcp.Description("Target cluster name (required in multi-cluster mode)")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		client, err := cr.resolve(req)
+		if err := checkRBAC(rbac, "slurm_cancel_job"); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		backend, err := cr.resolveBackend(req)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -88,7 +101,7 @@ func registerSlurmTools(s *server.MCPServer, cr *clusterResolver) {
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		if err := client.Slurm.Jobs().Delete(ctx, jobID); err != nil {
+		if err := backend.CancelJob(ctx, jobID); err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 		return mcp.NewToolResultText(fmt.Sprintf("Job %s cancelled", jobID)), nil
@@ -99,15 +112,18 @@ func registerSlurmTools(s *server.MCPServer, cr *clusterResolver) {
 		mcp.WithDescription("List all nodes in the Slurm cluster with their states and resources."+clusterDesc),
 		mcp.WithString("cluster", mcp.Description("Target cluster name (required in multi-cluster mode)")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		client, err := cr.resolve(req)
+		if err := checkRBAC(rbac, "slurm_list_nodes"); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		backend, err := cr.resolveBackend(req)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		nodes, err := client.Slurm.Nodes().List(ctx)
+		result, err := backend.ListNodes(ctx)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		return jsonResult(nodes)
+		return mcp.NewToolResultText(result), nil
 	})
 
 	s.AddTool(mcp.NewTool("slurm_get_node",
@@ -115,7 +131,10 @@ func registerSlurmTools(s *server.MCPServer, cr *clusterResolver) {
 		mcp.WithString("node_name", mcp.Required(), mcp.Description("The node name")),
 		mcp.WithString("cluster", mcp.Description("Target cluster name (required in multi-cluster mode)")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		client, err := cr.resolve(req)
+		if err := checkRBAC(rbac, "slurm_get_node"); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		backend, err := cr.resolveBackend(req)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -123,11 +142,11 @@ func registerSlurmTools(s *server.MCPServer, cr *clusterResolver) {
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		node, err := client.Slurm.Nodes().Get(ctx, name)
+		result, err := backend.GetNode(ctx, name)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		return jsonResult(node)
+		return mcp.NewToolResultText(result), nil
 	})
 
 	// --- Partitions ---
@@ -135,15 +154,18 @@ func registerSlurmTools(s *server.MCPServer, cr *clusterResolver) {
 		mcp.WithDescription("List all partitions in the Slurm cluster."+clusterDesc),
 		mcp.WithString("cluster", mcp.Description("Target cluster name (required in multi-cluster mode)")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		client, err := cr.resolve(req)
+		if err := checkRBAC(rbac, "slurm_list_partitions"); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		backend, err := cr.resolveBackend(req)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		parts, err := client.Slurm.Partitions().List(ctx)
+		result, err := backend.ListPartitions(ctx)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		return jsonResult(parts)
+		return mcp.NewToolResultText(result), nil
 	})
 
 	s.AddTool(mcp.NewTool("slurm_get_partition",
@@ -151,7 +173,10 @@ func registerSlurmTools(s *server.MCPServer, cr *clusterResolver) {
 		mcp.WithString("partition_name", mcp.Required(), mcp.Description("The partition name")),
 		mcp.WithString("cluster", mcp.Description("Target cluster name (required in multi-cluster mode)")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		client, err := cr.resolve(req)
+		if err := checkRBAC(rbac, "slurm_get_partition"); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		backend, err := cr.resolveBackend(req)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -159,11 +184,11 @@ func registerSlurmTools(s *server.MCPServer, cr *clusterResolver) {
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		part, err := client.Slurm.Partitions().Get(ctx, name)
+		result, err := backend.GetPartition(ctx, name)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		return jsonResult(part)
+		return mcp.NewToolResultText(result), nil
 	})
 
 	// --- Reservations ---
@@ -171,15 +196,18 @@ func registerSlurmTools(s *server.MCPServer, cr *clusterResolver) {
 		mcp.WithDescription("List all reservations in the Slurm cluster."+clusterDesc),
 		mcp.WithString("cluster", mcp.Description("Target cluster name (required in multi-cluster mode)")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		client, err := cr.resolve(req)
+		if err := checkRBAC(rbac, "slurm_list_reservations"); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		backend, err := cr.resolveBackend(req)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		res, err := client.Slurm.Reservations().List(ctx)
+		result, err := backend.ListReservations(ctx)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		return jsonResult(res)
+		return mcp.NewToolResultText(result), nil
 	})
 
 	// --- Licenses ---
@@ -187,15 +215,18 @@ func registerSlurmTools(s *server.MCPServer, cr *clusterResolver) {
 		mcp.WithDescription("List all licenses tracked by Slurm."+clusterDesc),
 		mcp.WithString("cluster", mcp.Description("Target cluster name (required in multi-cluster mode)")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		client, err := cr.resolve(req)
+		if err := checkRBAC(rbac, "slurm_list_licenses"); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		backend, err := cr.resolveBackend(req)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		lic, err := client.Slurm.Licenses().List(ctx)
+		result, err := backend.ListLicenses(ctx)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		return jsonResult(lic)
+		return mcp.NewToolResultText(result), nil
 	})
 
 	// --- Diag ---
@@ -203,15 +234,18 @@ func registerSlurmTools(s *server.MCPServer, cr *clusterResolver) {
 		mcp.WithDescription("Get Slurm controller diagnostics and statistics."+clusterDesc),
 		mcp.WithString("cluster", mcp.Description("Target cluster name (required in multi-cluster mode)")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		client, err := cr.resolve(req)
+		if err := checkRBAC(rbac, "slurm_diag"); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		backend, err := cr.resolveBackend(req)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		diag, err := client.Slurm.Diag().Get(ctx)
+		result, err := backend.GetDiag(ctx)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		return jsonResult(diag)
+		return mcp.NewToolResultText(result), nil
 	})
 
 	// --- Ping ---
@@ -219,15 +253,18 @@ func registerSlurmTools(s *server.MCPServer, cr *clusterResolver) {
 		mcp.WithDescription("Ping Slurm controllers to check if they are responding."+clusterDesc),
 		mcp.WithString("cluster", mcp.Description("Target cluster name (required in multi-cluster mode)")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		client, err := cr.resolve(req)
+		if err := checkRBAC(rbac, "slurm_ping"); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		backend, err := cr.resolveBackend(req)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		pings, err := client.Slurm.Ping().Get(ctx)
+		result, err := backend.Ping(ctx)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		return jsonResult(pings)
+		return mcp.NewToolResultText(result), nil
 	})
 }
 
@@ -239,5 +276,5 @@ func jsonResult(v any) (*mcp.CallToolResult, error) {
 	return mcp.NewToolResultText(string(data)), nil
 }
 
-func jsonMarshal(v any) ([]byte, error)    { return json.Marshal(v) }
+func jsonMarshal(v any) ([]byte, error)     { return json.Marshal(v) }
 func jsonUnmarshal(data []byte, v any) error { return json.Unmarshal(data, v) }

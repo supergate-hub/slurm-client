@@ -8,6 +8,7 @@ require (
 	github.com/getkin/kin-openapi v0.133.0
 	github.com/mark3labs/mcp-go v0.45.0
 	github.com/oapi-codegen/runtime v1.1.2
+	golang.org/x/crypto v0.17.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 
@@ -32,5 +33,6 @@ require (
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/woodsbury/decimal128 v1.4.0 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
+	golang.org/x/sys v0.21.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

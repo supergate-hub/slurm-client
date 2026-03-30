@@ -5,16 +5,18 @@ import (
 	"fmt"
 
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
 
 	slurmclient "github.com/supergate-hub/slurm-client"
 )
 
-func registerMultiClusterTools(s *server.MCPServer, mgr *slurmclient.Manager) {
+func registerMultiClusterTools(s toolAdder, mgr *slurmclient.Manager, rbac *RBAC) {
 	// --- Multi-Cluster: List Clusters ---
 	s.AddTool(mcp.NewTool("slurm_list_clusters",
 		mcp.WithDescription("List all connected Slurm clusters with their API versions."),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if err := checkRBAC(rbac, "slurm_list_clusters"); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
 		type clusterInfo struct {
 			Name    string `json:"name"`
 			Version string `json:"version"`
@@ -34,6 +36,9 @@ func registerMultiClusterTools(s *server.MCPServer, mgr *slurmclient.Manager) {
 	s.AddTool(mcp.NewTool("slurm_cluster_status",
 		mcp.WithDescription("Get a health summary for each connected cluster: ping status, node counts, and job counts."),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if err := checkRBAC(rbac, "slurm_cluster_status"); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
 		type clusterStatus struct {
 			Name       string `json:"name"`
 			Reachable  bool   `json:"reachable"`
@@ -77,6 +82,9 @@ func registerMultiClusterTools(s *server.MCPServer, mgr *slurmclient.Manager) {
 	s.AddTool(mcp.NewTool("slurm_cross_cluster_jobs",
 		mcp.WithDescription("List jobs from ALL connected clusters. Returns results grouped by cluster, including partial results if some clusters are unreachable."),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if err := checkRBAC(rbac, "slurm_cross_cluster_jobs"); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
 		results := mgr.AllJobs(ctx)
 
 		type clusterJobs struct {
@@ -104,6 +112,9 @@ func registerMultiClusterTools(s *server.MCPServer, mgr *slurmclient.Manager) {
 	s.AddTool(mcp.NewTool("slurm_node_health_summary",
 		mcp.WithDescription("Get a summary of node health across all clusters: counts of idle, allocated, mixed, down, and drained nodes per cluster."),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if err := checkRBAC(rbac, "slurm_node_health_summary"); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
 		results := mgr.AllNodes(ctx)
 
 		type nodeHealth struct {
@@ -139,6 +150,9 @@ func registerMultiClusterTools(s *server.MCPServer, mgr *slurmclient.Manager) {
 	s.AddTool(mcp.NewTool("slurm_resource_availability",
 		mcp.WithDescription("Show available resources per cluster and partition: total/idle nodes, total/idle CPUs. AI agents use this to recommend which cluster and partition to submit jobs to."),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if err := checkRBAC(rbac, "slurm_resource_availability"); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
 		results := mgr.AllPartitions(ctx)
 
 		type partitionInfo struct {

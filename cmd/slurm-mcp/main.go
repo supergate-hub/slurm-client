@@ -29,12 +29,25 @@ import (
 	slurmclient "github.com/supergate-hub/slurm-client"
 )
 
+// coreTools defines the 8 default tools exposed without --all-tools.
+var coreTools = map[string]bool{
+	"slurm_ping":            true,
+	"slurm_list_jobs":       true,
+	"slurm_get_job":         true,
+	"slurm_submit_job":      true,
+	"slurm_cancel_job":      true,
+	"slurm_list_nodes":      true,
+	"slurm_list_partitions": true,
+	"slurm_queue_depth":     true,
+}
+
 // clusterResolver resolves a cluster name from an MCP request to a *Client.
 // In single-cluster mode, the cluster parameter is ignored.
 // In multi-cluster mode, it routes to the appropriate cluster.
 type clusterResolver struct {
-	single  *slurmclient.Client  // non-nil in single-cluster mode
-	manager *slurmclient.Manager // non-nil in multi-cluster mode
+	single    *slurmclient.Client  // non-nil in single-cluster mode
+	manager   *slurmclient.Manager // non-nil in multi-cluster mode
+	backendFn func(*slurmclient.Client) MCPBackend
 }
 
 func (cr *clusterResolver) resolve(req mcp.CallToolRequest) (*slurmclient.Client, error) {
@@ -55,8 +68,38 @@ func (cr *clusterResolver) resolve(req mcp.CallToolRequest) (*slurmclient.Client
 	return cr.manager.Cluster(cluster)
 }
 
+func (cr *clusterResolver) resolveBackend(req mcp.CallToolRequest) (MCPBackend, error) {
+	client, err := cr.resolve(req)
+	if err != nil {
+		return nil, err
+	}
+	return cr.backendFn(client), nil
+}
+
 func (cr *clusterResolver) isMultiCluster() bool {
 	return cr.manager != nil
+}
+
+// toolRegistrar wraps server.MCPServer to gate tool registration based on --all-tools.
+type toolRegistrar struct {
+	server   *server.MCPServer
+	allTools bool
+}
+
+// AddTool registers a tool only if it's a core tool or --all-tools is enabled.
+func (tr *toolRegistrar) AddTool(tool mcp.Tool, handler func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error)) {
+	if tr.allTools || coreTools[tool.Name] {
+		tr.server.AddTool(tool, handler)
+	}
+}
+
+// checkRBAC verifies access before a tool handler runs.
+// Returns nil if RBAC is not configured or if access is granted.
+func checkRBAC(rbac *RBAC, toolName string) error {
+	if rbac == nil || !rbac.NeedsEnforcement() {
+		return nil
+	}
+	return rbac.Check(toolName)
 }
 
 func main() {
@@ -64,11 +107,29 @@ func main() {
 	transport := flag.String("transport", "stdio", "Transport mode: stdio or sse")
 	port := flag.String("port", "8080", "Port for SSE transport")
 	bearerToken := flag.String("bearer-token", "", "Bearer token for SSE transport authentication (required for sse)")
+	allTools := flag.Bool("all-tools", false, "Expose all 31 tools (default: 8 core tools)")
+	backend := flag.String("backend", "rest", "Backend type: rest or ssh")
 	flag.Parse()
+
+	// Validate backend flag
+	switch *backend {
+	case "rest":
+		// OK
+	case "ssh":
+		fmt.Fprintln(os.Stderr, "SSH backend not yet available, coming in next release")
+		os.Exit(1)
+	default:
+		log.Fatalf("Unknown backend: %s (supported: rest, ssh)", *backend)
+	}
 
 	ctx := context.Background()
 	var resolver clusterResolver
 	var mgr *slurmclient.Manager
+
+	// Set the backend factory function
+	resolver.backendFn = func(c *slurmclient.Client) MCPBackend {
+		return NewRestBackend(c)
+	}
 
 	if *configPath != "" {
 		// Multi-cluster mode
@@ -119,16 +180,6 @@ func main() {
 		server.WithPromptCapabilities(false),
 	)
 
-	registerSlurmTools(s, &resolver)
-	registerSlurmdbTools(s, &resolver)
-	registerResources(s, &resolver, mgr)
-	registerPrompts(s, &resolver, mgr)
-	registerAnalysisTools(s, &resolver, mgr)
-
-	if resolver.isMultiCluster() {
-		registerMultiClusterTools(s, mgr)
-	}
-
 	// RBAC: parse from clusters.yaml if present, or use default (admin)
 	var rbacCfg RBACConfig
 	if *configPath != "" {
@@ -149,6 +200,18 @@ func main() {
 	defer rbac.Close()
 	if rbac.NeedsEnforcement() || rbacCfg.AuditLog != "" {
 		rbac.LogStartup()
+	}
+
+	tr := &toolRegistrar{server: s, allTools: *allTools}
+
+	registerSlurmTools(tr, &resolver, rbac)
+	registerSlurmdbTools(tr, &resolver, rbac)
+	registerResources(s, &resolver, mgr)
+	registerPrompts(s, &resolver, mgr)
+	registerAnalysisTools(tr, &resolver, mgr, rbac)
+
+	if resolver.isMultiCluster() {
+		registerMultiClusterTools(tr, mgr, rbac)
 	}
 
 	switch *transport {
